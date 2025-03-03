@@ -33,14 +33,15 @@ func intToKey(i int) []byte {
 	return b
 }
 
-// dataKey returns the full key for storing an item:
-// the dataPrefix followed by the 8-byte big-endian representation.
+// dataKey returns the full key for storing an item,
+// which is the dataPrefix followed by the 8-byte big-endian representation.
 func dataKey(i int) []byte {
+	// Note: creating a new slice for the prefix so as not to modify the constant.
 	prefix := []byte(dataPrefix)
 	return append(prefix, intToKey(i)...)
 }
 
-// CircularList represents a persistent circular list stored in a single BoltDB bucket.
+// CircularList represents a persistent circular list stored entirely in one BoltDB bucket.
 type CircularList struct {
 	DB         *bolt.DB
 	BucketName []byte
@@ -59,7 +60,7 @@ func New(db *bolt.DB, bucketName string) *CircularList {
 		if err != nil {
 			return err
 		}
-		// Initialize meta keys.
+		// Initialize meta: current pointer = 0, next key = 0.
 		if err := b.Put([]byte(metaCurrentKey), encodeUint64(0)); err != nil {
 			return err
 		}
@@ -69,7 +70,7 @@ func New(db *bolt.DB, bucketName string) *CircularList {
 }
 
 // Open opens an existing circular list (or creates one if not present)
-// from the given bucket name, and ensures that meta keys exist.
+// from the given bucket name.
 func Open(db *bolt.DB, bucketName string) *CircularList {
 	cl := &CircularList{
 		DB:         db,
@@ -83,17 +84,10 @@ func Open(db *bolt.DB, bucketName string) *CircularList {
 			if err != nil {
 				return err
 			}
-		}
-		// Ensure the meta keys exist.
-		if b.Get([]byte(metaCurrentKey)) == nil {
 			if err := b.Put([]byte(metaCurrentKey), encodeUint64(0)); err != nil {
 				return err
 			}
-		}
-		if b.Get([]byte(metaNextKey)) == nil {
-			if err := b.Put([]byte(metaNextKey), encodeUint64(0)); err != nil {
-				return err
-			}
+			return b.Put([]byte(metaNextKey), encodeUint64(0))
 		}
 		return nil
 	})
@@ -206,6 +200,8 @@ func (cl *CircularList) Remove() {
 		if err := b.Delete(keys[index]); err != nil {
 			return err
 		}
+		// After deletion, update the current pointer:
+		// if the list becomes empty, set to 0; otherwise, if the pointer is at or past the end, wrap to 0.
 		newCount := count - 1
 		if newCount == 0 {
 			return setMetaCurrent(b, 0)

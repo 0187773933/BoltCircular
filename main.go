@@ -12,7 +12,7 @@ func main() {
 	defer db.Close()
 
 	// Create a new circular list.
-	cl := circular.New(db, "circular-test")
+	cl := circular.Open(db, "circular-test")
 
 	// Add some values.
 	cl.Add([]byte("A"))
